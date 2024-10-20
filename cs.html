@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Customer Service Chat</title>
+    <link
+      href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      #messages {
+        height: 300px;
+        overflow-y: scroll;
+        margin-bottom: 10px;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+      }
+      .customer-message {
+        text-align: right; /* Pesan Customer diratakan ke kanan */
+      }
+      .cs-message {
+        text-align: left; /* Pesan CS diratakan ke kiri */
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1 class="my-4">Customer Service Chat</h1>
+      <div id="messages" class="mb-3"></div>
+      <div class="input-group mb-3">
+        <input
+          type="text"
+          id="messageInput"
+          class="form-control"
+          placeholder="Type your message"
+        />
+        <div class="input-group-append">
+          <button class="btn btn-primary" onclick="sendMessage()">Send</button>
+        </div>
+        <button class="btn btn-secondary" onclick="assignClient()">
+          Take Client
+        </button>
+      </div>
+    </div>
+
+    <script>
+      const socket = new WebSocket("ws://localhost:8080");
+
+      socket.onopen = (event) => {
+        console.log("Connected to WebSocket");
+        socket.send(JSON.stringify({ type: "cs" }));
+      };
+
+      socket.onmessage = (event) => {
+        const messages = document.getElementById("messages");
+        const data = JSON.parse(event.data); // Parsing pesan yang diterima
+        console.log("Received:", data);
+
+        // Menambahkan logika untuk menampilkan pesan
+        if (data.type === "status") {
+          messages.innerHTML += `<div class="alert alert-info">${data.message}</div>`;
+        } else if (data.type === "message") {
+          // Pastikan menampilkan isi pesan yang benar
+          messages.innerHTML += `<div class="alert alert-success customer-message">${data.content}</div>`;
+        }
+        messages.scrollTop = messages.scrollHeight; // Menggulir ke bawah
+      };
+
+      function sendMessage() {
+        const input = document.getElementById("messageInput");
+        const message = input.value;
+        if (message) {
+          // Kirim pesan dalam format JSON
+          socket.send(JSON.stringify({ type: "message", content: message }));
+          // Tampilkan pesan yang dikirim oleh CS
+          messages.innerHTML += `<div class="alert alert-danger cs-message">${message}</div>`;
+          input.value = "";
+          messages.scrollTop = messages.scrollHeight; // Menggulir ke bawah
+        }
+      }
+
+      function assignClient() {
+        socket.send(JSON.stringify({ type: "assign" }));
+      }
+    </script>
+  </body>
+</html>

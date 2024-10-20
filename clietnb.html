@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CS Chat</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        background-color: #f8f9fa;
+      }
+      .client-list {
+        max-height: 80vh;
+        overflow-y: auto;
+      }
+      .client-item {
+        cursor: pointer;
+        padding: 10px;
+        border-bottom: 1px solid #ddd;
+        display: flex;
+        align-items: center;
+      }
+      .client-item:hover {
+        background-color: #f0f0f0;
+      }
+      .client-item.active {
+        background-color: #007bff;
+        color: white;
+      }
+      .profile-pic {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        margin-right: 10px;
+      }
+      .chat-container {
+        height: 80vh;
+        display: flex;
+        flex-direction: column;
+      }
+      .chat-body {
+        flex-grow: 1;
+        padding: 10px;
+        border: 1px solid #ddd;
+        overflow-y: auto;
+        background-color: #fff;
+      }
+      .chat-bubble {
+        padding: 10px;
+        border-radius: 10px;
+        margin-bottom: 5px;
+      }
+      .chat-bubble.cs {
+        background-color: #007bff;
+        color: white;
+        text-align: right;
+      }
+      .chat-bubble.client {
+        background-color: #e9ecef;
+      }
+      .message-container {
+        display: flex;
+        align-items: flex-start;
+        margin-bottom: 10px;
+      }
+      .message-container img {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        margin-right: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container-fluid">
+      <div class="row">
+        <!-- Client List -->
+        <div class="col-md-4">
+          <ul id="clientList" class="list-group client-list"></ul>
+        </div>
+
+        <!-- Chat Area -->
+        <div class="col-md-8">
+          <div class="chat-container">
+            <!-- Chat Header -->
+            <div class="p-3 bg-primary text-white">
+              <h5 id="chatWith">Select a Client</h5>
+            </div>
+
+            <!-- Chat Body -->
+            <div id="chatBox" class="chat-body"></div>
+
+            <!-- Chat Input -->
+            <div class="p-3">
+              <div class="input-group">
+                <input
+                  id="messageInput"
+                  type="text"
+                  class="form-control"
+                  placeholder="Type a message..."
+                  disabled
+                />
+                <button
+                  id="sendBtn"
+                  class="btn btn-primary"
+                  type="button"
+                  disabled
+                >
+                  Send
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const socket = new WebSocket("ws://localhost:8080");
+      const clientList = document.getElementById("clientList");
+      const chatBox = document.getElementById("chatBox");
+      const messageInput = document.getElementById("messageInput");
+      const sendBtn = document.getElementById("sendBtn");
+      let currentClient = null;
+      let chatHistories = {};
+
+      // WebSocket connection established
+      socket.onopen = () => {
+        socket.send(JSON.stringify({ type: "register", role: "cs" }));
+      };
+
+      // Handle incoming messages from WebSocket
+      socket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        // New client connected
+        if (data.type === "new-client") {
+          const clientItem = document.createElement("li");
+          clientItem.className = "list-group-item client-item";
+          clientItem.innerHTML = `<img src="${data.profilePic}" class="profile-pic" alt="Profile Picture"> Client ${data.clientId}`;
+          clientItem.onclick = () => selectClient(data.clientId);
+          clientList.appendChild(clientItem);
+        } else if (data.type === "message") {
+          const clientId = data.clientId;
+          if (!chatHistories[clientId]) chatHistories[clientId] = [];
+          chatHistories[clientId].push({
+            from: data.from,
+            message: data.message,
+          });
+          if (currentClient === clientId) {
+            displayMessages(chatHistories[clientId]);
+          }
+        }
+      };
+
+      // Select a client to chat with
+      function selectClient(clientId) {
+        currentClient = clientId;
+        chatBox.innerHTML = "";
+        document.getElementById(
+          "chatWith"
+        ).innerText = `Chatting with Client ${clientId}`;
+        messageInput.disabled = false;
+        sendBtn.disabled = false;
+
+        // Highlight active client
+        const activeClientItems = document.querySelectorAll(".client-item");
+        activeClientItems.forEach((item) => item.classList.remove("active"));
+
+        const selectedItem = [...clientList.children].find((item) =>
+          item.innerText.includes(clientId)
+        );
+        if (selectedItem) selectedItem.classList.add("active");
+
+        // Display chat history if it exists, else accept client
+        if (chatHistories[clientId]) {
+          displayMessages(chatHistories[clientId]);
+        } else {
+          socket.send(JSON.stringify({ type: "accept-client", clientId }));
+        }
+      }
+
+      // Display messages in the chat box
+      function displayMessages(messages) {
+        chatBox.innerHTML = "";
+        messages.forEach((msg) => {
+          const messageDiv = document.createElement("div");
+          const messageContainer = document.createElement("div");
+          messageContainer.className = "message-container";
+
+          if (msg.from === "cs") {
+            messageDiv.className = "chat-bubble cs";
+            messageDiv.innerText = `You: ${msg.message}`;
+            messageContainer.appendChild(messageDiv);
+          } else {
+            const profilePic = document.createElement("img");
+            profilePic.src = "https://via.placeholder.com/30"; // Ganti dengan foto profil client
+            messageDiv.className = "chat-bubble client";
+            messageDiv.innerText = `Client: ${msg.message}`;
+            messageContainer.appendChild(profilePic);
+            messageContainer.appendChild(messageDiv);
+          }
+
+          chatBox.appendChild(messageContainer);
+        });
+        chatBox.scrollTop = chatBox.scrollHeight;
+      }
+
+      // Send message
+      sendBtn.onclick = () => {
+        const messageText = messageInput.value;
+        if (messageText && currentClient) {
+          socket.send(
+            JSON.stringify({
+              type: "message",
+              message: messageText,
+              clientId: currentClient,
+            })
+          );
+          messageInput.value = "";
+          if (!chatHistories[currentClient]) chatHistories[currentClient] = [];
+          chatHistories[currentClient].push({
+            from: "cs",
+            message: messageText,
+          });
+          displayMessages(chatHistories[currentClient]);
+        }
+      };
+    </script>
+  </body>
+</html>
